@@ -1,59 +1,64 @@
 import streamlit as st
-import math # À rajouter tout en haut de ton fichier app.py
+import math
 
-st.set_page_config(page_title="Tarificateur EBM", layout="centered")
-st.title("Calculateur de Prix - Gravure Laser")
+# Dictionnaire des réglages validés en atelier
+MATERIAUX_LASER = {
+    "carton": {
+        "nom": "Carton ondulé", "vitesse": "800 - 1000", "puissance": "60% - 70%", 
+        "mode": "M3 (Ligne Centrale)", "air_assist": "MAX", "focale": "Cran 'Cutting'"
+    },
+    "verre_sable": {
+        "nom": "Verre transparent (Sablage)", "vitesse": "1000 - 1200", "puissance": "70% - 85%", 
+        "mode": "M4", "air_assist": "OFF", "focale": "Cran 1 + Peinture noire"
+    },
+    "miroir_dos": {
+        "nom": "Miroir (par le dos)", "vitesse": "1500 - 2000", "puissance": "40% - 50%", 
+        "mode": "M4 (1bit Pointillisme)", "air_assist": "OUI", "focale": "Cran 1 + Négatif + Symétrie"
+    },
+    "marbre": {
+        "nom": "Marbre (Plaque)", "vitesse": "1000 - 1500", "puissance": "80% - 100%", 
+        "mode": "M4", "air_assist": "OUI", "focale": "Cran 1 (Peinture si marbre clair)"
+    }
+}
 
-# Paramètres fixes
-st.sidebar.header("Paramètres (Micro-entreprise)")
-taux_horaire = st.sidebar.number_input("Taux horaire main d'œuvre (€/h)", value=35.0, step=5.0)
-cout_machine_heure = st.sidebar.number_input("Frais machine (€/h)", value=3.0, step=0.5)
-taux_urssaf = st.sidebar.slider("Charges URSSAF (%)", 0.0, 25.0, 12.3) 
-marge_souhaitee = st.sidebar.slider("Marge bénéficiaire nette (%)", 0, 100, 30)
+# Configuration de la page
+st.set_page_config(page_title="EBM-CREATION - Devis & Atelier")
+st.title("Gestion de Production EBM-CREATION")
 
-# Saisie du projet
-st.header("Nouveau Projet")
-materiau = st.selectbox("Support", ["Verre / Miroir", "Bois", "Acrylique"])
+# Création des onglets
+tab_devis, tab_atelier = st.tabs(["💰 Devis & Tarification", "🛠️ Fiche Atelier Laser"])
 
-col1, col2 = st.columns(2)
-with col1:
-    prix_achat = st.number_input("Prix d'achat du support (€)", value=10.0, step=1.0)
-    conso_extra = st.number_input("Consommables (€)", value=1.5, step=0.5)
-with col2:
-    temps_prepa = st.number_input("Temps de préparation (min)", value=15, step=5)
-    temps_gravure = st.number_input("Temps de gravure (min)", value=20, step=5)
+# --- ONGLET 1 : DEVIS ---
+with tab_devis:
+    st.header("Calculateur de Prix de Vente")
+    
+    # Saisie des valeurs (avec des valeurs par défaut)
+    cout_de_revient = st.number_input("Coût de revient matière (€)", min_value=0.0, value=15.50)
+    taux_urssaf = st.number_input("Taux URSSAF (%)", min_value=0.0, value=21.2)
+    marge_souhaitee = st.number_input("Marge nette souhaitée (%)", min_value=0.0, value=40.0)
+    
+    # Ton code de calcul exact
+    facteur = 1 - ((taux_urssaf + marge_souhaitee) / 100)
+    prix_vente_exact = cout_de_revient / facteur if facteur > 0 else 0
+    prix_vente = math.ceil(prix_vente_exact)
+    
+    st.success(f"Prix de vente recommandé : **{prix_vente}.00 €**")
 
-# Calculs
-cout_matiere = prix_achat + conso_extra
-cout_main_oeuvre = (temps_prepa / 60) * taux_horaire
-cout_utilisation_machine = (temps_gravure / 60) * cout_machine_heure
-cout_de_revient = cout_matiere + cout_main_oeuvre + cout_utilisation_machine
-
-facteur = 1 - ((taux_urssaf + marge_souhaitee) / 100)
-prix_vente_exact = cout_de_revient / facteur if facteur > 0 else 0
-
-# Arrondi à l'euro supérieur (ex: 44.12 € devient 45.00 €)
-prix_vente = math.ceil(prix_vente_exact)
-
-st.divider()
-
-# Résultat
-st.subheader(f"🏷️ Prix de vente conseillé : {prix_vente:.2f} €")
-st.write(f"- **Coût de revient sec :** {cout_de_revient:.2f} €")
-st.write(f"- **Provision URSSAF ({taux_urssaf}%) :** {(prix_vente * taux_urssaf / 100):.2f} €")
-st.write(f"- **Bénéfice net :** {(prix_vente * marge_souhaitee / 100):.2f} €")
-
-st.divider()
-
-# Bloc Tiime
-st.subheader("📝 Préparation pour Tiime")
-description_tiime = f"""Prestation de gravure laser personnalisée.
-- Support : {materiau}
-- Préparation et adaptation du fichier graphique
-- Paramétrage et gravure laser
-- Finitions et nettoyage
-
-Visuel fourni en annexe à titre indicatif (photo non contractuelle). Le rendu final de la gravure peut légèrement varier en fonction des caractéristiques naturelles du support."""
-
-st.text_area("Texte à copier/coller dans Tiime :", value=description_tiime, height=180)
-st.metric(label="Prix de vente (TTC) à saisir", value=f"{prix_vente:.2f} €")
+# --- ONGLET 2 : ATELIER ---
+with tab_atelier:
+    st.header("Paramètres Creality Falcon2 22W")
+    
+    choix_mat = st.selectbox(
+        "Sélectionner un matériau en production :", 
+        options=list(MATERIAUX_LASER.keys()),
+        format_func=lambda x: MATERIAUX_LASER[x]["nom"]
+    )
+    
+    if choix_mat:
+        consignes = MATERIAUX_LASER[choix_mat]
+        st.write("---")
+        st.markdown(f"**Vitesse :** {consignes['vitesse']} mm/min")
+        st.markdown(f"**Puissance (S-MAX) :** {consignes['puissance']}")
+        st.markdown(f"**Mode :** {consignes['mode']}")
+        st.markdown(f"**Air Assist :** {consignes['air_assist']}")
+        st.markdown(f"**Focale & Astuces :** {consignes['focale']}")

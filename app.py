@@ -1,4 +1,5 @@
 import streamlit as st
+import math # À rajouter tout en haut de ton fichier app.py
 
 st.set_page_config(page_title="Tarificateur EBM", layout="centered")
 st.title("Calculateur de Prix - Gravure Laser")
@@ -29,7 +30,10 @@ cout_utilisation_machine = (temps_gravure / 60) * cout_machine_heure
 cout_de_revient = cout_matiere + cout_main_oeuvre + cout_utilisation_machine
 
 facteur = 1 - ((taux_urssaf + marge_souhaitee) / 100)
-prix_vente = cout_de_revient / facteur if facteur > 0 else 0
+prix_vente_exact = cout_de_revient / facteur if facteur > 0 else 0
+
+# Arrondi à l'euro supérieur (ex: 44.12 € devient 45.00 €)
+prix_vente = math.ceil(prix_vente_exact)
 
 st.divider()
 

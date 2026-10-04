@@ -1,87 +1,100 @@
 import streamlit as st
 import math
+import pandas as pd
+from datetime import datetime
 
-# Dictionnaire des réglages validés en atelier
-MATERIAUX_LASER = {
-    "carton": {
-        "nom": "Carton ondulé", "vitesse": "800 - 1000", "puissance": "60% - 70%", 
-        "mode": "M3 (Ligne Centrale)", "air_assist": "MAX", "focale": "Cran 'Cutting'"
-    },
-    "verre_sable": {
-        "nom": "Verre transparent (Sablage)", "vitesse": "1000 - 1200", "puissance": "70% - 85%", 
-        "mode": "M4", "air_assist": "OFF", "focale": "Cran 1 + Peinture noire"
-    },
-    "miroir_dos": {
-        "nom": "Miroir (par le dos)", "vitesse": "1500 - 2000", "puissance": "40% - 50%", 
-        "mode": "M4 (1bit Pointillisme)", "air_assist": "OUI", "focale": "Cran 1 + Négatif + Symétrie"
-    },
-    "marbre": {
-        "nom": "Marbre (Plaque)", "vitesse": "1000 - 1500", "puissance": "80% - 100%", 
-        "mode": "M4", "air_assist": "OUI", "focale": "Cran 1 (Peinture si marbre clair)"
-    }
-}
+st.set_page_config(page_title="EBM Gestion", layout="centered")
+st.title("EBM-CREATION : Gestion & Chiffrage")
 
-st.set_page_config(page_title="EBM-CREATION - Production", layout="wide")
-st.title("Gestion de Production EBM-CREATION")
+# Initialisation d'un historique de session (pour stocker les ventes en compta)
+if "historique" not in st.session_state:
+    st.session_state.historique = []
 
-# Inversion des onglets : Atelier en premier, Devis en second
-tab_atelier, tab_devis = st.tabs(["🛠️ Fiche Atelier Laser", "💰 Devis & Tarification"])
+# Création des deux onglets
+tab_calcul, tab_compta = st.tabs(["🧮 Calculateur", "📊 Comptabilité"])
 
-# --- ONGLET 1 : ATELIER ---
-with tab_atelier:
-    st.header("Paramètres Creality Falcon2 22W")
-    
-    choix_mat = st.selectbox(
-        "Sélectionner un matériau en production :", 
-        options=list(MATERIAUX_LASER.keys()),
-        format_func=lambda x: MATERIAUX_LASER[x]["nom"]
-    )
-    
-    if choix_mat:
-        consignes = MATERIAUX_LASER[choix_mat]
-        st.write("---")
-        col_A, col_B = st.columns(2)
-        with col_A:
-            st.markdown(f"**Vitesse :** {consignes['vitesse']} mm/min")
-            st.markdown(f"**Puissance (S-MAX) :** {consignes['puissance']}")
-            st.markdown(f"**Mode :** {consignes['mode']}")
-        with col_B:
-            st.markdown(f"**Air Assist :** {consignes['air_assist']}")
-            st.markdown(f"**Focale & Astuces :** {consignes['focale']}")
+# ==========================================
+# ONGLET 1 : CALCULATEUR
+# ==========================================
+with tab_calcul:
+    # Paramètres de l'entreprise
+    st.sidebar.header("Paramètres (Micro-entreprise)")
+    taux_horaire = st.sidebar.number_input("Taux horaire MO (€/h)", value=35.0, step=5.0)
+    cout_machine_heure = st.sidebar.number_input("Frais machine (€/h)", value=3.0, step=0.5)
+    taux_urssaf = st.sidebar.slider("Charges URSSAF (%)", 0.0, 25.0, 12.3) 
+    marge_souhaitee = st.sidebar.slider("Marge bénéficiaire nette (%)", 0, 100, 30)
 
-# --- ONGLET 2 : DEVIS ---
-with tab_devis:
-    st.header("Calculateur de Prix de Vente Détaillé")
-    
-    # Séparation en deux colonnes pour une meilleure lisibilité
+    st.header("Nouveau Projet")
+    materiau = st.selectbox("Support", ["Verre / Miroir", "Bois", "Acrylique", "Impression 3D"])
+
     col1, col2 = st.columns(2)
-    
     with col1:
-        st.subheader("Données d'entrée")
-        cout_de_revient = st.number_input("Coût de revient matière (€)", min_value=0.0, value=15.50, step=0.50)
-        taux_urssaf = st.number_input("Taux URSSAF (%)", min_value=0.0, value=21.2, step=0.1)
-        marge_souhaitee = st.number_input("Marge nette souhaitée (%)", min_value=0.0, value=40.0, step=1.0)
-    
-    # Calculs via ta formule
+        prix_achat = st.number_input("Prix d'achat du support (€)", value=10.0, step=1.0)
+        conso_extra = st.number_input("Consommables (€)", value=1.5, step=0.5)
+    with col2:
+        temps_prepa = st.number_input("Temps de préparation (min)", value=15, step=5)
+        temps_gravure = st.number_input("Temps machine (min)", value=20, step=5)
+
+    # Calculs
+    cout_matiere = prix_achat + conso_extra
+    cout_main_oeuvre = (temps_prepa / 60) * taux_horaire
+    cout_utilisation_machine = (temps_gravure / 60) * cout_machine_heure
+    cout_de_revient = cout_matiere + cout_main_oeuvre + cout_utilisation_machine
+
     facteur = 1 - ((taux_urssaf + marge_souhaitee) / 100)
     prix_vente_exact = cout_de_revient / facteur if facteur > 0 else 0
+    
+    # Arrondi à l'euro supérieur (ex: 44.12 € -> 45.00 €)
     prix_vente = math.ceil(prix_vente_exact)
     
-    # Décomposition financière pour le détail
+    # Calcul des parts réelles après arrondi
     montant_urssaf = prix_vente * (taux_urssaf / 100)
-    benefice_net = prix_vente - cout_de_revient - montant_urssaf
+    benef_net = prix_vente - cout_de_revient - montant_urssaf
+
+    st.divider()
+    st.subheader(f"🏷️ Prix de vente conseillé : {prix_vente} €")
+    st.write(f"*(Coût de revient sec : {cout_de_revient:.2f} €)*")
     
-    with col2:
-        st.subheader("Bilan Financier")
-        st.info(f"**Prix de vente recommandé : {prix_vente}.00 €** *(Exact : {prix_vente_exact:.2f} €)*")
+    # Bouton pour envoyer vers la compta
+    if st.button("✅ Valider et ajouter à la comptabilité"):
+        st.session_state.historique.append({
+            "Date": datetime.now().strftime("%d/%m/%Y %H:%M"),
+            "Projet": materiau,
+            "CA (€)": prix_vente,
+            "Coût (€)": round(cout_de_revient, 2),
+            "URSSAF (€)": round(montant_urssaf, 2),
+            "Bénéfice (€)": round(benef_net, 2)
+        })
+        st.success("Projet enregistré ! Va dans l'onglet Comptabilité pour voir le résumé.")
+
+# ==========================================
+# ONGLET 2 : COMPTABILITÉ
+# ==========================================
+with tab_compta:
+    st.header("📊 Suivi Comptable EBM-CREATION")
+    
+    if len(st.session_state.historique) > 0:
+        # Transformation des données en tableau (DataFrame Pandas)
+        df = pd.DataFrame(st.session_state.historique)
         
-        # Affichage visuel des métriques
-        metrique1, metrique2, metrique3 = st.columns(3)
-        metrique1.metric(label="Coût Matière", value=f"{cout_de_revient:.2f} €")
-        metrique2.metric(label="Prov. URSSAF", value=f"{montant_urssaf:.2f} €")
-        metrique3.metric(label="Marge Nette", value=f"{benefice_net:.2f} €")
+        # Affichage des métriques globales
+        ca_total = df["CA (€)"].sum()
+        urssaf_total = df["URSSAF (€)"].sum()
+        benef_total = df["Bénéfice (€)"].sum()
         
-    st.write("---")
-    # Aperçu dynamique de la facture/devis
-    st.markdown("### 📝 Aperçu Devis Client")
-    st.code(f"Prestation de personnalisation laser\nTotal TTC : {prix_vente}.00 €", language="text")
+        col_a, col_b, col_c = st.columns(3)
+        col_a.metric("Chiffre d'Affaires", f"{ca_total:.2f} €")
+        col_b.metric("Provision URSSAF", f"{urssaf_total:.2f} €")
+        col_c.metric("Bénéfice Net Total", f"{benef_total:.2f} €")
+        
+        st.divider()
+        st.subheader("Livre des recettes (Session en cours)")
+        st.dataframe(df, use_container_width=True)
+        
+        st.info("⚠️ Note : Ces données restent en mémoire tant que l'onglet du navigateur est ouvert. Si tu rafraîchis la page, le tableau repartira à zéro.")
+        
+        if st.button("🗑️ Vider l'historique comptable"):
+            st.session_state.historique = []
+            st.rerun()
+    else:
+        st.info("Aucune vente enregistrée. Calcule et valide un projet dans l'onglet 🧮 Calculateur pour alimenter ta comptabilité.")

@@ -19,7 +19,7 @@ tab_calcul, tab_compta = st.tabs(["🧮 Calculateur", "📊 Comptabilité"])
 with tab_calcul:
     # Paramètres de l'entreprise
     st.sidebar.header("Paramètres (Micro-entreprise)")
-    taux_horaire = st.sidebar.number_input("Taux horaire MO (€/h)", value=35.0, step=5.0)
+    taux_horaire = st.sidebar.number_input("Taux horaire MO (€/h)", value=25.0, step=5.0)
     cout_machine_heure = st.sidebar.number_input("Frais machine (€/h)", value=3.0, step=0.5)
     taux_urssaf = st.sidebar.slider("Charges URSSAF (%)", 0.0, 25.0, 12.3) 
     marge_souhaitee = st.sidebar.slider("Marge bénéficiaire nette (%)", 0, 100, 30)

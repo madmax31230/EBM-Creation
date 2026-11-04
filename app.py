@@ -75,7 +75,7 @@ with tab_calcul:
     livraison = st.toggle("📦 Ajouter une expédition")
     tarif_transporteur = 0.0
     cout_emballage = 0.0
-    statut_livraison = "Non"
+    statut_livraison = "Main propre"
     
     if livraison:
         col_dim, col_poids, col_trans = st.columns(3)
@@ -97,14 +97,35 @@ with tab_calcul:
         else:
             st.error(f"⚠️ {statut}")
 
-    paiement_stripe = st.toggle("💳 Paiement via Stripe (absorption des frais)")
+    st.markdown("<br>", unsafe_allow_html=True)
+    methode_paiement = st.selectbox(
+        "💳 Méthode de paiement (absorption des frais)",
+        [
+            "Espèces / Virement (Sans frais)", 
+            "SumUp - Terminal TPE (1,75%)", 
+            "SumUp - Lien en ligne (2,50%)",
+            "Stripe - En ligne (1,5% + 0,25€)"
+        ]
+    )
 
     # --- CALCULS FINAUX ---
     montant_cible_net = prix_vente_produit + tarif_transporteur + cout_emballage
     
-    if paiement_stripe:
-        # Formule inverse : (Cible + Frais Fixes) / (1 - Pourcentage)
-        prix_final_client = (montant_cible_net + 0.25) / (1 - 0.015)
+    # Initialisation des frais
+    taux_pct = 0.0
+    frais_fixe = 0.0
+
+    if "Stripe" in methode_paiement:
+        taux_pct = 0.015
+        frais_fixe = 0.25
+    elif "TPE" in methode_paiement:
+        taux_pct = 0.0175
+    elif "Lien en ligne" in methode_paiement:
+        taux_pct = 0.025
+
+    # Formule universelle d'absorption : (Cible + Frais Fixes) / (1 - Pourcentage)
+    if taux_pct > 0 or frais_fixe > 0:
+        prix_final_client = (montant_cible_net + frais_fixe) / (1 - taux_pct)
         frais_bancaires = prix_final_client - montant_cible_net
     else:
         prix_final_client = montant_cible_net
@@ -121,14 +142,16 @@ with tab_calcul:
     st.subheader(f"🏷️ Total à facturer au client : {prix_final_client} €")
     if livraison:
         st.write(f"*(Inclut {tarif_transporteur + cout_emballage:.2f} € de logistique)*")
-    if paiement_stripe:
-        st.write(f"*(Inclut {frais_bancaires:.2f} € de frais Stripe)*")
+    if frais_bancaires > 0:
+        nom_banque = "Stripe" if "Stripe" in methode_paiement else "SumUp"
+        st.write(f"*(Inclut {frais_bancaires:.2f} € de frais {nom_banque})*")
 
     if st.button("✅ Valider et ajouter à la comptabilité"):
         st.session_state.historique.append({
             "Date": datetime.now().strftime("%d/%m/%Y %H:%M"),
             "Projet": materiau,
             "Livraison": statut_livraison,
+            "Paiement": methode_paiement.split(" (")[0],
             "CA (€)": prix_final_client,
             "Coûts (€)": round(cout_total, 2),
             "URSSAF (€)": round(montant_urssaf, 2),
@@ -136,6 +159,9 @@ with tab_calcul:
         })
         st.success("Projet enregistré ! Va dans l'onglet Comptabilité.")
 
+# ==========================================
+# ONGLET 2 : COMPTABILITÉ
+# ==========================================
 with tab_compta:
     st.header("📊 Suivi Comptable EBM-CREATION")
     

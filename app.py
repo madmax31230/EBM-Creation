@@ -9,18 +9,15 @@ st.title("EBM-CREATION : Gestion & Chiffrage")
 # --- DONNÉES TRANSPORTEURS ---
 TARIFS_TRANSPORTEURS = {
     "Mondial Relay (Point Relais)": {
-        "max_l_w_h_cm": 150, 
-        "max_length_cm": 120, 
+        "max_l_w_h_cm": 150, "max_length_cm": 120, 
         "grille": [(0.25, 4.15), (0.5, 4.15), (1.0, 5.99), (2.0, 7.99), (5.0, 15.99)]
     },
     "Colissimo (Point Retrait)": {
-        "max_l_w_h_cm": 150, 
-        "max_length_cm": 100,
+        "max_l_w_h_cm": 150, "max_length_cm": 100,
         "grille": [(0.25, 4.79), (0.5, 6.89), (1.0, 8.89), (2.0, 10.49), (5.0, 16.69)]
     },
     "Colissimo (Domicile)": {
-        "max_l_w_h_cm": 150, 
-        "max_length_cm": 100,
+        "max_l_w_h_cm": 150, "max_length_cm": 100,
         "grille": [(0.25, 5.49), (0.5, 7.59), (1.0, 9.59), (2.0, 11.19), (5.0, 17.39)]
     }
 }
@@ -34,11 +31,9 @@ def obtenir_tarif_transporteur(transporteur, poids_kg, l, w, h):
             return prix, "OK"
     return None, "Poids > 5 kg"
 
-# --- INITIALISATION SESSION ---
 if "historique" not in st.session_state:
     st.session_state.historique = []
 
-# --- INTERFACE ---
 tab_calcul, tab_compta = st.tabs(["🧮 Calculateur", "📊 Comptabilité"])
 
 with tab_calcul:
@@ -59,15 +54,13 @@ with tab_calcul:
         temps_prepa = st.number_input("Temps de préparation (min)", value=15, step=5)
         temps_gravure = st.number_input("Temps machine (min)", value=20, step=5)
 
-    # Calcul Produit
     cout_matiere = prix_achat + conso_extra
     cout_main_oeuvre = (temps_prepa / 60) * taux_horaire
     cout_utilisation_machine = (temps_gravure / 60) * cout_machine_heure
     cout_de_revient_produit = cout_matiere + cout_main_oeuvre + cout_utilisation_machine
 
     facteur = 1 - ((taux_urssaf + marge_souhaitee) / 100)
-    prix_vente_produit_exact = cout_de_revient_produit / facteur if facteur > 0 else 0
-    prix_vente_produit = math.ceil(prix_vente_produit_exact)
+    prix_vente_produit = math.ceil(cout_de_revient_produit / facteur if facteur > 0 else 0)
 
     st.divider()
     st.header("2. Expédition & Paiement")
@@ -92,15 +85,15 @@ with tab_calcul:
         tarif_brut, statut = obtenir_tarif_transporteur(choix_transporteur, poids, l, w, h)
         if tarif_brut is not None:
             tarif_transporteur = tarif_brut
-            st.caption(f"✅ Tarif d'affranchissement trouvé : {tarif_transporteur} €")
             statut_livraison = choix_transporteur
         else:
             st.error(f"⚠️ {statut}")
 
     st.markdown("<br>", unsafe_allow_html=True)
     methode_paiement = st.selectbox(
-        "💳 Méthode de paiement (absorption des frais)",
+        "💳 Méthode de paiement",
         [
+            "🤖 Optimisation Auto (Vente à distance)",
             "Espèces / Virement (Sans frais)", 
             "SumUp - Terminal TPE (1,75%)", 
             "SumUp - Lien en ligne (2,50%)",
@@ -110,12 +103,21 @@ with tab_calcul:
 
     # --- CALCULS FINAUX ---
     montant_cible_net = prix_vente_produit + tarif_transporteur + cout_emballage
-    
-    # Initialisation des frais
     taux_pct = 0.0
     frais_fixe = 0.0
+    processeur_choisi = methode_paiement
 
-    if "Stripe" in methode_paiement:
+    # Logique d'optimisation
+    if "Optimisation Auto" in methode_paiement:
+        if montant_cible_net < 24.38:
+            taux_pct = 0.025
+            frais_fixe = 0.0
+            processeur_choisi = "SumUp - Lien en ligne (Automatique)"
+        else:
+            taux_pct = 0.015
+            frais_fixe = 0.25
+            processeur_choisi = "Stripe (Automatique)"
+    elif "Stripe" in methode_paiement:
         taux_pct = 0.015
         frais_fixe = 0.25
     elif "TPE" in methode_paiement:
@@ -123,7 +125,6 @@ with tab_calcul:
     elif "Lien en ligne" in methode_paiement:
         taux_pct = 0.025
 
-    # Formule universelle d'absorption : (Cible + Frais Fixes) / (1 - Pourcentage)
     if taux_pct > 0 or frais_fixe > 0:
         prix_final_client = (montant_cible_net + frais_fixe) / (1 - taux_pct)
         frais_bancaires = prix_final_client - montant_cible_net
@@ -133,25 +134,26 @@ with tab_calcul:
 
     prix_final_client = round(prix_final_client, 2)
     
-    # Calculs Compta
     cout_total = cout_de_revient_produit + tarif_transporteur + cout_emballage + frais_bancaires
     montant_urssaf = prix_final_client * (taux_urssaf / 100)
     benef_net = prix_final_client - cout_total - montant_urssaf
 
     st.divider()
+    if "Optimisation Auto" in methode_paiement:
+        st.info(f"💡 Le processeur optimal sélectionné est : **{processeur_choisi}**")
+        
     st.subheader(f"🏷️ Total à facturer au client : {prix_final_client} €")
     if livraison:
         st.write(f"*(Inclut {tarif_transporteur + cout_emballage:.2f} € de logistique)*")
     if frais_bancaires > 0:
-        nom_banque = "Stripe" if "Stripe" in methode_paiement else "SumUp"
-        st.write(f"*(Inclut {frais_bancaires:.2f} € de frais {nom_banque})*")
+        st.write(f"*(Inclut {frais_bancaires:.2f} € de frais bancaires absorbés)*")
 
     if st.button("✅ Valider et ajouter à la comptabilité"):
         st.session_state.historique.append({
             "Date": datetime.now().strftime("%d/%m/%Y %H:%M"),
             "Projet": materiau,
             "Livraison": statut_livraison,
-            "Paiement": methode_paiement.split(" (")[0],
+            "Paiement": processeur_choisi.split(" (")[0].split(" -")[0],
             "CA (€)": prix_final_client,
             "Coûts (€)": round(cout_total, 2),
             "URSSAF (€)": round(montant_urssaf, 2),
@@ -159,32 +161,18 @@ with tab_calcul:
         })
         st.success("Projet enregistré ! Va dans l'onglet Comptabilité.")
 
-# ==========================================
-# ONGLET 2 : COMPTABILITÉ
-# ==========================================
 with tab_compta:
     st.header("📊 Suivi Comptable EBM-CREATION")
-    
     if len(st.session_state.historique) > 0:
         df = pd.DataFrame(st.session_state.historique)
-        
-        ca_total = df["CA (€)"].sum()
-        urssaf_total = df["URSSAF (€)"].sum()
-        benef_total = df["Bénéfice (€)"].sum()
-        
         col_a, col_b, col_c = st.columns(3)
-        col_a.metric("Chiffre d'Affaires", f"{ca_total:.2f} €")
-        col_b.metric("Provision URSSAF", f"{urssaf_total:.2f} €")
-        col_c.metric("Bénéfice Net Total", f"{benef_total:.2f} €")
-        
+        col_a.metric("Chiffre d'Affaires", f"{df['CA (€)'].sum():.2f} €")
+        col_b.metric("Provision URSSAF", f"{df['URSSAF (€)'].sum():.2f} €")
+        col_c.metric("Bénéfice Net Total", f"{df['Bénéfice (€)'].sum():.2f} €")
         st.divider()
-        st.subheader("Livre des recettes (Session en cours)")
         st.dataframe(df, use_container_width=True)
-        
-        st.info("⚠️ Note : Ces données restent en mémoire tant que l'onglet du navigateur est ouvert.")
-        
         if st.button("🗑️ Vider l'historique comptable"):
             st.session_state.historique = []
             st.rerun()
     else:
-        st.info("Aucune vente enregistrée. Calcule et valide un projet dans l'onglet 🧮 Calculateur.")
+        st.info("Aucune vente enregistrée.")
